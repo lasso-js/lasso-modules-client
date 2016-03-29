@@ -179,26 +179,16 @@ https://github.com/joyent/node/blob/master/lib/module.js
         mains[realPath] = relativePath;
     }
 
-    function remap(oldRealPath, relativePath) {
-        remapped[oldRealPath] = relativePath;
+    function remap(oldLogicalPath, newLogicalPath) {
+        remapped[oldLogicalPath] = newLogicalPath;
     }
 
-    function registerDependency(logicalParentPath, dependencyId, dependencyVersion, dependencyAlsoKnownAs) {
-        if (dependencyId === false) {
-            // This module has been remapped to a "void" module (empty object) for the browser.
-            // Add an entry in the dependencies, but use `null` as the value (handled differently from undefined)
-            dependencies[logicalParentPath + '/$/' + dependencyAlsoKnownAs] = null;
-            return;
-        }
-
+    function registerInstalledDependency(logicalParentPath, dependencyId, dependencyVersion) {
         var logicalPath = dependencyId.charAt(0) === '.' ?
             logicalParentPath + dependencyId.substring(1) : // Remove '.' at the beginning
             logicalParentPath + '/$/' + dependencyId;
 
         dependencies[logicalPath] =  [dependencyVersion];
-        if (dependencyAlsoKnownAs !== undefined) {
-            dependencies[logicalParentPath + '/$/' + dependencyAlsoKnownAs] =  [dependencyVersion, dependencyId, logicalPath];
-        }
     }
 
     /**
@@ -372,7 +362,7 @@ https://github.com/joyent/node/blob/master/lib/module.js
             dependencyInfo[0]);
     }
 
-    function resolveModule(target, from) {
+    function resolveInstalledModule(target, from) {
         if (target.charAt(target.length-1) === '/') {
             // This is a hack because I found require('util/') in the wild and
             // it did not work because of the trailing slash
@@ -509,7 +499,6 @@ https://github.com/joyent/node/blob/master/lib/module.js
 
     function resolve(target, from) {
         var resolved;
-        var remappedPath;
 
         if (target.charAt(0) === '.') {
             // turn relative path into absolute path
@@ -518,14 +507,8 @@ https://github.com/joyent/node/blob/master/lib/module.js
             // handle targets such as "/my/file" or "/$/foo/$/baz"
             resolved = resolveAbsolute(normalizePathParts(target.split('/')));
         } else {
-            remappedPath = remapped[target];
-            if (remappedPath) {
-                // The remapped path should be a complete logical path
-                return resolve(remappedPath);
-            } else {
-                // handle targets such as "foo/lib/index"
-                resolved = resolveModule(target, from);
-            }
+            resolved = resolveInstalledModule(target, from);
+
         }
 
         if (!resolved) {
@@ -541,9 +524,6 @@ https://github.com/joyent/node/blob/master/lib/module.js
             return ['$', '$', {}];
         }
 
-        if (!realPath) {
-            return resolve(logicalPath);
-        }
 
         // target is something like "/foo/baz"
         // There is no installed module in the path
@@ -551,16 +531,19 @@ https://github.com/joyent/node/blob/master/lib/module.js
 
         // check to see if "target" is a "directory" which has a registered main file
         if ((relativePath = mains[realPath]) !== undefined) {
+            if (!relativePath) {
+                relativePath = 'index';
+            }
+
             // there is a main file corresponding to the given target so add the relative path
             logicalPath = join(logicalPath, relativePath);
             realPath = join(realPath, relativePath);
         }
 
-        remappedPath = remapped[realPath];
-        if (remappedPath !== undefined) {
-            // remappedPath should be treated as a relative path
-            logicalPath = join(logicalPath + '/..', remappedPath);
-            realPath = join(realPath + '/..', remappedPath);
+        var remappedPath = remapped[logicalPath];
+
+        if (remappedPath) {
+            return resolve(remappedPath);
         }
 
         var factoryOrObject = definitions[realPath];
@@ -688,11 +671,15 @@ https://github.com/joyent/node/blob/master/lib/module.js
      * to be in the browser window object
      */
     $rmod = {
-        // "def" is used to define a module
+        /**
+         * Used to register a module factory/object (*internal*)
+         */
         def: define,
 
-        // "dep" is used to register a dependency (e.g. "/$/foo" depends on "baz")
-        dep: registerDependency,
+        /**
+         * Used to register an installed dependency (e.g. "/$/foo" depends on "baz") (*internal*)
+         */
+        installed: registerInstalledDependency,
         run: run,
         main: registerMain,
         remap: remap,
@@ -700,7 +687,11 @@ https://github.com/joyent/node/blob/master/lib/module.js
         resolve: resolve,
         join: join,
         ready: ready,
-        addSearchPath: addSearchPath,
+
+        /**
+         * Add a search path entry (internal)
+         */
+        searchPath: addSearchPath,
 
         /**
          * Asynchronous bundle loaders should call `pending()` to instantiate
