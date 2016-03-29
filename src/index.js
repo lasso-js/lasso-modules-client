@@ -44,6 +44,9 @@ https://github.com/joyent/node/blob/master/lib/module.js
     //      "/$/streams" => ["3.0.0"]
     var dependencies = {};
 
+    // Maps builtin modules such as "path", "buffer" to their real paths
+    var builtins = {};
+
     // this object maps relative paths to a specific real path
     var mains = {};
 
@@ -181,6 +184,10 @@ https://github.com/joyent/node/blob/master/lib/module.js
 
     function remap(oldLogicalPath, newLogicalPath) {
         remapped[oldLogicalPath] = newLogicalPath;
+    }
+
+    function builtin(name, target) {
+        builtins[name] = target;
     }
 
     function registerInstalledDependency(logicalParentPath, dependencyId, dependencyVersion) {
@@ -367,6 +374,14 @@ https://github.com/joyent/node/blob/master/lib/module.js
             // This is a hack because I found require('util/') in the wild and
             // it did not work because of the trailing slash
             target = target.slice(0, -1);
+        }
+
+        // Check to see if the target module is a builtin module.
+        // For example:
+        // builtins['path'] = '/path-browserify@0.0.0/index'
+        var builtinPath = builtins[target];
+        if (builtinPath) {
+            return [builtinPath, builtinPath, undefined];
         }
 
         var len = searchPaths.length;
@@ -683,6 +698,7 @@ https://github.com/joyent/node/blob/master/lib/module.js
         run: run,
         main: registerMain,
         remap: remap,
+        builtin: builtin,
         require: require,
         resolve: resolve,
         join: join,
