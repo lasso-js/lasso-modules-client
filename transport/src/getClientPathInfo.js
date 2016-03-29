@@ -9,17 +9,12 @@ var normalizePathParts = require('./util/normalizePathParts');
 
 var sep = nodePath.sep;
 
-
-
-
-
 function getClientPathInfo(path, options) {
     ok(typeof path === 'string', 'path should be a string');
     options = options || {};
     var normalizedPath = nodePath.normalize(path);
 
     var removeExt = options.removeExt !== false;
-
     var root = options.root || lassoPackageRoot.getRootDir(path);
 
     var lastNodeModules = normalizedPath.lastIndexOf('node_modules' + sep);
