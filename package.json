@@ -6,9 +6,10 @@
     "url": "https://github.com/lasso-js/lasso-modules-client.git"
   },
   "scripts": {
-    "test": "npm run mocha-client && npm run mocha-transport && npm run jshint",
+    "test": "npm run mocha && npm run jshint",
+    "mocha": "node_modules/.bin/mocha --ui bdd --reporter spec test/ transport/test/",
     "mocha-client": "node_modules/.bin/mocha --ui bdd --reporter spec test/",
-    "mocha-transport": "node_modules/.bin/mocha --ui bdd --reporter spec test/ transport/test/",
+    "mocha-transport": "node_modules/.bin/mocha --ui bdd --reporter spec transport/test/",
     "jshint": "node_modules/.bin/jshint src/ transport/src/"
   },
   "author": "Patrick Steele-Idem <pnidem@gmail.com>",
