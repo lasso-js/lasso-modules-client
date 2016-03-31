@@ -9,5 +9,5 @@ exports.codeGenerators = {
     searchPath: require('./code-search-path')
 };
 
-exports.getClientPathInfo = require('./getClientPathInfo');
+exports.getClientPath = require('./getClientPath');
 exports.normalizeMain = require('./normalizeMain');

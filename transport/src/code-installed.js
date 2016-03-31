@@ -1,11 +1,11 @@
-function installedCode(logicalParentPath, childName, childVersion, options) {
+function installedCode(parentPath, childName, childVersion, options) {
     var modulesRuntimeGlobal = (options && options.modulesRuntimeGlobal) || '$rmod';
 
-    if (logicalParentPath === '/') {
-        logicalParentPath = '';
+    if (parentPath === '/') {
+        parentPath = '';
     }
 
-    var code = modulesRuntimeGlobal + '.installed(' + JSON.stringify(logicalParentPath) + ', ' +
+    var code = modulesRuntimeGlobal + '.installed(' + JSON.stringify(parentPath) + ', ' +
         JSON.stringify(childName) + ', ' +
         JSON.stringify(childVersion);
 

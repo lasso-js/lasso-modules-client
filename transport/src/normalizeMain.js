@@ -1,9 +1,8 @@
 var path = require('path');
-var normalizePathParts = require('./util/normalizePathParts');
 var removeCommonExt = require('./util/removeCommonExt');
 
 function normalizeMain(dir, main) {
-    var relativePath = normalizePathParts(path.relative(dir, main));
+    var relativePath = path.relative(dir, main);
     relativePath = removeCommonExt(relativePath);
 
     if (relativePath === 'index') {
