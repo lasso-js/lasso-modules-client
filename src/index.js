@@ -14,12 +14,12 @@ https://github.com/joyent/node/blob/master/lib/module.js
 (function() {
     var win = typeof window === 'undefined' ? null : window;
 
-    if (win && win.$rmod) {
+    if (win && win.$_mod) {
         return;
     }
 
     /** the module runtime */
-    var $rmod;
+    var $_mod;
 
     // this object stores the module factories with the keys being module paths and
     // values being a factory function or object (e.g. "/baz$3.0.0/lib/index" --> Function)
@@ -33,7 +33,7 @@ https://github.com/joyent/node/blob/master/lib/module.js
     // have been loaded
     var _ready = false;
 
-    // If $rmod.run() is called when the page is not ready then
+    // If $_mod.run() is called when the page is not ready then
     // we queue up the run modules to be executed later
     var runQueue = [];
 
@@ -145,9 +145,9 @@ https://github.com/joyent/node/blob/master/lib/module.js
             instanceRequire.cache = instanceCache;
 
             // Expose the module system runtime via the `runtime` property
-            instanceRequire.runtime = $rmod;
+            instanceRequire.runtime = $_mod;
 
-            // $rmod.def("/foo$1.0.0/lib/index", function(require, exports, module, __filename, __dirname) {
+            // $_mod.def("/foo$1.0.0/lib/index", function(require, exports, module, __filename, __dirname) {
             this.exports = {};
 
             // call the factory function
@@ -165,7 +165,7 @@ https://github.com/joyent/node/blob/master/lib/module.js
      */
     function define(path, factoryOrObject, options) {
         /*
-        $rmod.def('/baz$3.0.0/lib/index', function(require, exports, module, __filename, __dirname) {
+        $_mod.def('/baz$3.0.0/lib/index', function(require, exports, module, __filename, __dirname) {
             // module source code goes here
         });
         */
@@ -452,7 +452,7 @@ https://github.com/joyent/node/blob/master/lib/module.js
     }
 
     /*
-    $rmod.run('/$/installed-module', '/src/foo');
+    $_mod.run('/$/installed-module', '/src/foo');
     */
     function run(path, options) {
         var wait = !options || (options.wait !== false);
@@ -505,10 +505,10 @@ https://github.com/joyent/node/blob/master/lib/module.js
     };
 
     /*
-     * $rmod is the short-hand version that that the transport layer expects
+     * $_mod is the short-hand version that that the transport layer expects
      * to be in the browser window object
      */
-    $rmod = {
+    $_mod = {
         /**
          * Used to register a module factory/object (*internal*)
          */
@@ -549,8 +549,8 @@ https://github.com/joyent/node/blob/master/lib/module.js
     };
 
     if (win) {
-        win.$rmod = $rmod;
+        win.$_mod = $_mod;
     } else {
-        module.exports = $rmod;
+        module.exports = $_mod;
     }
 })();

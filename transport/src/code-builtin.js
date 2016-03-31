@@ -1,5 +1,5 @@
 function registerBuiltinCode(name, target, options) {
-    var modulesRuntimeGlobal = (options && options.modulesRuntimeGlobal) || '$rmod';
+    var modulesRuntimeGlobal = (options && options.modulesRuntimeGlobal) || '$_mod';
 
     var code = modulesRuntimeGlobal + '.builtin(' +
         JSON.stringify(name) + ', ' +

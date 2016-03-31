@@ -1,5 +1,5 @@
 function readyCode(options) {
-    var modulesRuntimeGlobal = (options && options.modulesRuntimeGlobal) || '$rmod';
+    var modulesRuntimeGlobal = (options && options.modulesRuntimeGlobal) || '$_mod';
     return modulesRuntimeGlobal + '.ready();';
 }
 

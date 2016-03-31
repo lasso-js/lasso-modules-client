@@ -51,7 +51,7 @@ function defineCode(path, code, options) {
         throw new Error('"code" argument is required');
     }
 
-    var modulesRuntimeGlobal = (options && options.modulesRuntimeGlobal) || '$rmod';
+    var modulesRuntimeGlobal = (options && options.modulesRuntimeGlobal) || '$_mod';
 
 
     result += modulesRuntimeGlobal + '.def(';

@@ -1,5 +1,5 @@
 function registerMainCode(path, main, options) {
-    var modulesRuntimeGlobal = (options && options.modulesRuntimeGlobal) || '$rmod';
+    var modulesRuntimeGlobal = (options && options.modulesRuntimeGlobal) || '$_mod';
 
 
     var code = modulesRuntimeGlobal + '.main(' + JSON.stringify(path) + ', ' +

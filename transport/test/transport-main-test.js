@@ -10,7 +10,7 @@ describe('lasso-modules-client/transport/codeGenerators/main' , function() {
 
     it('should generate correct code', function() {
         var code = transport.codeGenerators.main('/foo$1.0.0', 'lib/index');
-        expect(code).to.equal('$rmod.main("/foo$1.0.0", "lib/index");');
+        expect(code).to.equal('$_mod.main("/foo$1.0.0", "lib/index");');
     });
 });
 
