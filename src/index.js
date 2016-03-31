@@ -1,8 +1,12 @@
 /*
 GOAL: This module should mirror the NodeJS module system according the documented behavior.
-The module transport will generate code that is used for resolving
-real paths for a given logical path. This information is used to
-resolve dependencies on client-side (in the browser).
+The module transport will send down code that registers module definitions by an assigned path. In addition,
+the module transport will send down code that registers additional metadata to allow the module resolver to
+resolve modules in the browser. Additional metadata includes the following:
+
+- "mains": The mapping of module directory paths to a fully resolved module path
+- "remaps": The remapping of one fully resolved module path to another fully resolved module path (used for browser overrides)
+- "run": A list of entry point modules that should be executed when ready
 
 Inspired by:
 https://github.com/joyent/node/blob/master/lib/module.js
@@ -17,7 +21,8 @@ https://github.com/joyent/node/blob/master/lib/module.js
     /** the module runtime */
     var $rmod;
 
-    // this object stores the module factories with the keys being real paths of module (e.g. "/baz@3.0.0/lib/index" --> Function)
+    // this object stores the module factories with the keys being module paths and
+    // values being a factory function or object (e.g. "/baz$3.0.0/lib/index" --> Function)
     var definitions = {};
 
     // Search path that will be checked when looking for modules
@@ -32,33 +37,37 @@ https://github.com/joyent/node/blob/master/lib/module.js
     // we queue up the run modules to be executed later
     var runQueue = [];
 
-    // this object stores the Module instance cache with the keys being logical paths of modules (e.g., "/$/foo/$/baz" --> Module)
+    // this object stores the Module instance cache with the keys being paths of modules (e.g., "/foo$1.0.0/bar" --> Module)
     var instanceCache = {};
 
-    // this object maps dependency logical path to a specific version (for example, "/$/foo/$/baz" --> ["3.0.0"])
-    // Each entry in the object is an array. The first item of the array is the version number of the dependency.
-    // The second item of the array (if present), is the real dependency ID if the entry belongs to a remapping rule.
-    // For example, with a remapping, an entry might look like:
-    //      "/$/streams" => ["3.0.0", "streams-browser"]
-    // An example with no remapping:
-    //      "/$/streams" => ["3.0.0"]
+    // This object maps installed dependencies to specific versions
+    //
+    // For example:
+    // {
+    //   // The package "foo" with version 1.0.0 has an installed package named "bar" (foo/node_modules/bar") and
+    //   // the version of "bar" is 3.0.0
+    //   "/foo$1.0.0/bar": "3.0.0"
+    // }
     var dependencies = {};
 
-    // Maps builtin modules such as "path", "buffer" to their real paths
+    // Maps builtin modules such as "path", "buffer" to their fully resolved paths
     var builtins = {};
 
-    // this object maps relative paths to a specific real path
+    // this object maps a directory to the fully resolved module path
+    //
+    // For example:
+    //
     var mains = {};
 
-    // used to remap a real path to a new path (keys are real paths and values are relative paths)
+    // used to remap a one fully resolved module path to another fully resolved module path
     var remapped = {};
 
     var cacheByDirname = {};
 
     // When a module is mapped to a global varialble we add a reference
-    // that maps the real path of the module to the loaded global instance.
+    // that maps the path of the module to the loaded global instance.
     // We use this mapping to ensure that global modules are only loaded
-    // once if they map to the same real path.
+    // once if they map to the same path.
     //
     // See issue #5 - Ensure modules mapped to globals only load once
     // https://github.com/raptorjs/raptor-modules/issues/5
@@ -74,11 +83,11 @@ https://github.com/joyent/node/blob/master/lib/module.js
         return err;
     }
 
-    function Module(resolved) {
+    function Module(filename) {
        /*
         A Node module has these properties:
-        - filename: The logical path of the module
-        - id: The logical path of the module (same as filename)
+        - filename: The path of the module
+        - id: The path of the module (same as filename)
         - exports: The exports provided during load
         - loaded: Has module been fully loaded (set to false until factory function returns)
 
@@ -87,7 +96,7 @@ https://github.com/joyent/node/blob/master/lib/module.js
         - paths: The search path used by this module (NOTE: not documented in Node.js module system so we don't need support)
         - children: The modules that were required by this module
         */
-        this.id = this.filename = resolved[0];
+        this.id = this.filename = filename;
         this.loaded = false;
     }
 
@@ -96,17 +105,14 @@ https://github.com/joyent/node/blob/master/lib/module.js
     proto = Module.prototype;
 
     proto.load = function(factoryOrObject) {
-        var logicalPath = this.id;
+        var filename = this.id;
 
         if (factoryOrObject && factoryOrObject.constructor === Function) {
             // factoryOrObject is definitely a function
-            var lastSlashPos = logicalPath.lastIndexOf('/');
+            var lastSlashPos = filename.lastIndexOf('/');
 
             // find the value for the __dirname parameter to factory
-            var dirname = logicalPath.substring(0, lastSlashPos);
-
-            // find the value for the __filename paramter to factory
-            var filename = logicalPath;
+            var dirname = filename.substring(0, lastSlashPos);
 
             // local cache for requires initiated from this module/dirname
             var localCache = cacheByDirname[dirname] || (cacheByDirname[dirname] = {});
@@ -116,10 +122,10 @@ https://github.com/joyent/node/blob/master/lib/module.js
                 return localCache[target] || (localCache[target] = require(target, dirname));
             };
 
-            // The require method should have a resolve method that will return logical
+            // The require method should have a resolve method that will return the resolved
             // path but not actually instantiate the module.
             // This resolve function will make sure a definition exists for the corresponding
-            // real path of the target but it will not instantiate a new instance of the target.
+            // path of the target but it will not instantiate a new instance of the target.
             instanceRequire.resolve = function(target) {
                 if (!target) {
                     throw moduleNotFoundError('');
@@ -131,8 +137,7 @@ https://github.com/joyent/node/blob/master/lib/module.js
                     throw moduleNotFoundError(target, dirname);
                 }
 
-                // Return logical path
-                // NOTE: resolved[0] is logical path
+                // NOTE: resolved[0] is the path and resolved[1] is the module factory
                 return resolved[0];
             };
 
@@ -142,7 +147,7 @@ https://github.com/joyent/node/blob/master/lib/module.js
             // Expose the module system runtime via the `runtime` property
             instanceRequire.runtime = $rmod;
 
-            // $rmod.def("/foo@1.0.0/lib/index", function(require, exports, module, __filename, __dirname) {
+            // $rmod.def("/foo$1.0.0/lib/index", function(require, exports, module, __filename, __dirname) {
             this.exports = {};
 
             // call the factory function
@@ -158,44 +163,42 @@ https://github.com/joyent/node/blob/master/lib/module.js
     /**
      * Defines a packages whose metadata is used by raptor-loader to load the package.
      */
-    function define(realPath, factoryOrObject, options) {
+    function define(path, factoryOrObject, options) {
         /*
-        $rmod.def('/baz@3.0.0/lib/index', function(require, exports, module, __filename, __dirname) {
+        $rmod.def('/baz$3.0.0/lib/index', function(require, exports, module, __filename, __dirname) {
             // module source code goes here
         });
         */
 
         var globals = options && options.globals;
 
-        definitions[realPath] = factoryOrObject;
+        definitions[path] = factoryOrObject;
 
         if (globals) {
             var target = win || global;
             for (var i=0;i<globals.length; i++) {
                 var globalVarName = globals[i];
-                loadedGlobalsByRealPath[realPath] = target[globalVarName] = require(realPath, realPath);
+                loadedGlobalsByRealPath[path] = target[globalVarName] = require(path);
             }
         }
     }
 
-    function registerMain(realPath, relativePath) {
-        mains[realPath] = relativePath;
+    function registerMain(path, relativePath) {
+        mains[path] = relativePath;
     }
 
-    function remap(oldLogicalPath, newLogicalPath) {
-        remapped[oldLogicalPath] = newLogicalPath;
+    function remap(fromPath, toPath) {
+        remapped[fromPath] = toPath;
     }
 
     function builtin(name, target) {
         builtins[name] = target;
     }
 
-    function registerInstalledDependency(logicalParentPath, dependencyId, dependencyVersion) {
-        var logicalPath = dependencyId.charAt(0) === '.' ?
-            logicalParentPath + dependencyId.substring(1) : // Remove '.' at the beginning
-            logicalParentPath + '/$/' + dependencyId;
-
-        dependencies[logicalPath] =  [dependencyVersion];
+    function registerInstalledDependency(parentPath, packageName, packageVersion) {
+        // Example:
+        // dependencies['/my-package$1.0.0/$/my-installed-package'] = '2.0.0'
+        dependencies[parentPath + '/' + packageName] =  packageVersion;
     }
 
     /**
@@ -270,106 +273,29 @@ https://github.com/joyent/node/blob/master/lib/module.js
             : path.substring(0, lastDotPos);
     }
 
-    function truncate(str, length) {
-        return str.substring(0, str.length - length);
+    function splitPackageIdAndSubpath(path) {
+        // Examples:
+        //     '/my-package$1.0.0/foo/bar' --> ['/my-package$1.0.0', '/foo/bar']
+        //     '/my-package$1.0.0' --> ['/my-package$1.0.0', '']
+        //     '/my-package$1.0.0/' --> ['/my-package$1.0.0', '/']
+        //     '/@my-scoped-package/foo/$1.0.0/' --> ['/@my-scoped-package/foo$1.0.0', '/']
+        var slashPos = path.indexOf('/', 1 /* Skip past the first slash */);
+
+        if (path.charAt(1) === '@') {
+            // path is something like "/@my-user-name/my-scoped-package/subpath"
+            // For scoped packages, the package name is two parts. We need to skip
+            // past the second slash to get the full package name
+            slashPos = path.indexOf('/', slashPos+1);
+        }
+
+        return slashPos === -1 ? [path, ''] : [path.substring(0, slashPos), path.substring(slashPos)];
     }
 
-    /**
-     * @param {String} logicalParentPath the path from which given dependencyId is required
-     * @param {String} dependencyId the name of the module (e.g. "async") (NOTE: should not contain slashes)
-     * @param {String} full version of the dependency that is required from given logical parent path
-     */
-    function versionedDependencyInfo(logicalPath, dependencyId, subpath, dependencyVersion) {
-        // Our internal module resolver will return an array with the following properties:
-        // - logicalPath: The logical path of the module (used for caching instances)
-        // - realPath: The real path of the module (used for instantiating new instances via factory)
-        var realPath = dependencyVersion && ('/' + dependencyId + '@' + dependencyVersion + subpath);
-        logicalPath = logicalPath + subpath;
-
-        // return [logicalPath, realPath, factoryOrObject]
-        return [logicalPath, realPath, undefined];
-    }
-
-    function resolveAbsolute(target, origTarget) {
-        var start = target.lastIndexOf('$');
-        if (start === -1) {
-            // return [logicalPath, realPath, factoryOrObject]
-            return [target, target, undefined];
-        }
-
-        // target is something like "/$/foo/$/baz/lib/index"
-        // In this example we need to find what version of "baz" foo requires
-
-        // "start" is currently pointing to the last "$". We want to find the dependencyId
-        // which will start after after the substring "$/" (so we increment by two)
-        start += 2;
-
-        // the "end" needs to point to the slash that follows the "$" (if there is one)
-        var end = target.indexOf('/', start + 3);
-        var logicalPath;
-        var subpath;
-        var dependencyId;
-
-        if (end === -1) {
-            // target is something like "/$/foo/$/baz" so there is no subpath after the dependencyId
-            logicalPath = target;
-            subpath = '';
-            dependencyId = target.substring(start);
-        } else {
-            // Fixes https://github.com/raptorjs/raptor-modules/issues/15
-            // Handle scoped packages where scope and package name are separated by a
-            // forward slash (e.g. '@scope/package-name')
-            //
-            // In the case of scoped packages the dependencyId should be the combination of the scope
-            // and the package name. Therefore if the target module begins with an '@' symbol then
-            // skip past the first slash
-            if (target.charAt(start) === '@') {
-                end = target.indexOf('/', end+1);
-            }
-
-            // target is something like "/$/foo/$/baz/lib/index" so we need to separate subpath
-            // from the dependencyId
-
-            // logical path should not include the subpath
-            logicalPath = target.substring(0, end);
-
-            // subpath will be something like "/lib/index"
-            subpath = target.substring(end);
-
-            // dependencyId will be something like "baz" (will not contain slashes)
-            dependencyId = target.substring(start, end);
-        }
-
-        // lookup the version
-        var dependencyInfo = dependencies[logicalPath];
-        if (dependencyInfo === undefined) {
-            return undefined;
-        }
-
-        if (dependencyInfo === null) {
-            // This dependency has been mapped to a void module (empty object). Return an empty
-            // array as an indicator
-            return [];
-        }
-
-        return versionedDependencyInfo(
-            // dependencyInfo[2] is the logicalPath that the module should actually use
-            // if it has been remapped. If dependencyInfo[2] is undefined then we haven't
-            // found a remapped module and simply use the logicalPath that we checked
-            dependencyInfo[2] || logicalPath,
-
-            // realPath:
-            // dependencyInfo[1] is the optional remapped dependency ID
-            // (use the actual dependencyID from target if remapped dependency ID is undefined)
-            dependencyInfo[1] || dependencyId,
-
-            subpath,
-
-            // first item is version number
-            dependencyInfo[0]);
-    }
 
     function resolveInstalledModule(target, from) {
+        // Examples:
+        // target='foo', from='/my-package$1.0.0/hello/world'
+
         if (target.charAt(target.length-1) === '/') {
             // This is a hack because I found require('util/') in the wild and
             // it did not work because of the trailing slash
@@ -378,210 +304,107 @@ https://github.com/joyent/node/blob/master/lib/module.js
 
         // Check to see if the target module is a builtin module.
         // For example:
-        // builtins['path'] = '/path-browserify@0.0.0/index'
+        // builtins['path'] = '/path-browserify$0.0.0/index'
         var builtinPath = builtins[target];
         if (builtinPath) {
-            return [builtinPath, builtinPath, undefined];
+            return builtinPath;
         }
 
-        var len = searchPaths.length;
-        for (var i = 0; i < len; i++) {
-            // search path entries always end in "/";
-            var candidate = searchPaths[i] + target;
-            var resolved = resolve(candidate, from);
-            if (resolved) {
-                return resolved;
-            }
-        }
+        var fromParts = splitPackageIdAndSubpath(from);
+        var fromPackageId = fromParts[0];
 
-        var dependencyId;
-        var subpath;
 
-        var lastSlashPos = target.indexOf('/');
+        var targetSlashPos = target.indexOf('/');
+        var targetPackageName;
+        var targetSubpath;
 
-        // Fixes https://github.com/raptorjs/raptor-modules/issues/15
-        // Handle scoped packages where scope and package name are separated by a
-        // forward slash (e.g. '@scope/package-name')
-        //
-        // In the case of scoped packages the dependencyId should be the combination of the scope
-        // and the package name. Therefore if the target module begins with an '@' symbol then
-        // skip past the first slash
-        if (lastSlashPos !== -1 && target.charAt(0) === '@') {
-            lastSlashPos = target.indexOf('/', lastSlashPos+1);
-        }
-
-        if (lastSlashPos === -1) {
-            dependencyId = target;
-            subpath = '';
+        if (targetSlashPos < 0) {
+            targetPackageName = target;
+            targetSubpath = '';
         } else {
-            // When we're resolving a module, we don't care about the subpath at first
-            dependencyId = target.substring(0, lastSlashPos);
-            subpath = target.substring(lastSlashPos);
-        }
 
-        /*
-        Consider when the module "baz" (which is a dependency of "foo") requires module "async":
-        resolve('async', '/$/foo/$/baz');
-
-        // TRY
-        /$/foo/$/baz/$/async
-        /$/foo/$/async
-        /$/async
-
-        // SKIP
-        /$/foo/$/$/async
-        /$/$/async
-        */
-
-        // First check to see if there is a sibling "$" with the given target
-        // by adding "/$/<target>" to the given "from" path.
-        // If the given from is "/$/foo/$/baz" then we will try "/$/foo/$/baz/$/async"
-        var logicalPath = from + '/$/' + dependencyId;
-        var dependencyInfo = dependencies[logicalPath];
-        if (dependencyInfo !== undefined) {
-            if (dependencyInfo === null) {
-                // This dependency has been mapped to a void module (empty object). Return an empty
-                // array as an indicator
-                return [];
-            }
-            return versionedDependencyInfo(
-                // dependencyInfo[2] is the logicalPath that the module should actually use
-                // if it has been remapped. If dependencyInfo[2] is undefined then we haven't
-                // found a remapped module and simply use the logicalPath that we checked
-                dependencyInfo[2] || logicalPath,
-
-                // dependencyInfo[1] is the optional remapped dependency ID
-                // (use the actual dependencyID from target if remapped dependency ID is undefined)
-                dependencyInfo[1] || dependencyId,
-
-                subpath,
-
-                // dependencyVersion
-                dependencyInfo[0]);
-        }
-
-        var end = from.lastIndexOf('/');
-
-        // if there is no "/" in the from path then this path is technically invalid (right?)
-        while(end !== -1) {
-
-            var start = -1;
-
-            // make sure we don't check a logical path that would end with "/$/$/dependencyId"
-            if (end > 0) {
-                start = from.lastIndexOf('/', end - 1);
-                if ((start !== -1) && (end - start === 2) && (from.charAt(start + 1) === '$')) {
-                    // check to see if the substring from [start:end] is '/$/'
-                    // skip look at this subpath because it ends with "/$/"
-                    end = start;
-                    continue;
-                }
+            if (target.charAt(0) === '@') {
+                // target is something like "@my-user-name/my-scoped-package/subpath"
+                // For scoped packages, the package name is two parts. We need to skip
+                // past the first slash to get the full package name
+                targetSlashPos = target.indexOf('/', targetSlashPos + 1);
             }
 
-            logicalPath = from.substring(0, end) + '/$/' + dependencyId;
-
-            dependencyInfo = dependencies[logicalPath];
-            if (dependencyInfo !== undefined) {
-                if (dependencyInfo === null) {
-                    return [];
-                }
-
-                return versionedDependencyInfo(
-                    // dependencyInfo[2] is the logicalPath that the module should actually use
-                    // if it has been remapped. If dependencyInfo[2] is undefined then we haven't
-                    // found a remapped module and simply use the logicalPath that we checked
-                    dependencyInfo[2] || logicalPath,
-
-                    // dependencyInfo[1] is the optional remapped dependency ID
-                    // (use the actual dependencyID from target if remapped dependency ID is undefined)
-                    dependencyInfo[1] || dependencyId,
-
-                    subpath,
-
-                    // version number
-                    dependencyInfo[0]);
-            } else if (start === -1) {
-                break;
-            }
-
-            // move end to the last slash that precedes it
-            end = start;
+            targetPackageName = target.substring(0, targetSlashPos);
+            targetSubpath = target.substring(targetSlashPos);
         }
 
-        // not found
-        return undefined;
+        var targetPackageVersion = dependencies[fromPackageId + '/' + targetPackageName];
+        if (targetPackageVersion) {
+            var resolvedPath = '/' + targetPackageName + '$' + targetPackageVersion;
+            if (targetSubpath) {
+                resolvedPath += targetSubpath;
+            }
+            return resolvedPath;
+        }
     }
 
     function resolve(target, from) {
-        var resolved;
+        var resolvedPath;
 
         if (target.charAt(0) === '.') {
             // turn relative path into absolute path
-            resolved = resolveAbsolute(join(from, target), target);
+            resolvedPath = join(from, target);
         } else if (target.charAt(0) === '/') {
             // handle targets such as "/my/file" or "/$/foo/$/baz"
-            resolved = resolveAbsolute(normalizePathParts(target.split('/')));
+            resolvedPath = normalizePathParts(target.split('/'));
         } else {
-            resolved = resolveInstalledModule(target, from);
+            var len = searchPaths.length;
+            for (var i = 0; i < len; i++) {
+                // search path entries always end in "/";
+                var candidate = searchPaths[i] + target;
+                var resolved = resolve(candidate, from);
+                if (resolved) {
+                    return resolved;
+                }
+            }
 
+            resolvedPath = resolveInstalledModule(target, from);
         }
 
-        if (!resolved) {
+        if (!resolvedPath) {
             return undefined;
         }
-
-        var logicalPath = resolved[0];
-        var realPath = resolved[1];
-
-        if (logicalPath === undefined) {
-            // This dependency has been mapped to a void module (empty object).
-            // Use a special '$' for logicalPath and realPath and an empty object for the factoryOrObject
-            return ['$', '$', {}];
-        }
-
 
         // target is something like "/foo/baz"
         // There is no installed module in the path
         var relativePath;
 
         // check to see if "target" is a "directory" which has a registered main file
-        if ((relativePath = mains[realPath]) !== undefined) {
+        if ((relativePath = mains[resolvedPath]) !== undefined) {
             if (!relativePath) {
                 relativePath = 'index';
             }
 
             // there is a main file corresponding to the given target so add the relative path
-            logicalPath = join(logicalPath, relativePath);
-            realPath = join(realPath, relativePath);
+            resolvedPath = join(resolvedPath, relativePath);
         }
 
-        var remappedPath = remapped[logicalPath];
-
+        var remappedPath = remapped[resolvedPath];
         if (remappedPath) {
-            return resolve(remappedPath);
+            resolvedPath = remappedPath;
         }
 
-        var factoryOrObject = definitions[realPath];
+        var factoryOrObject = definitions[resolvedPath];
         if (factoryOrObject === undefined) {
-            // check for definition for given realPath but without extension
-            var realPathWithoutExtension;
-            if (((realPathWithoutExtension = withoutExtension(realPath)) === null) ||
-                ((factoryOrObject = definitions[realPathWithoutExtension]) === undefined)) {
+            // check for definition for given path but without extension
+            var resolvedPathWithoutExtension;
+            if (((resolvedPathWithoutExtension = withoutExtension(resolvedPath)) === null) ||
+                ((factoryOrObject = definitions[resolvedPathWithoutExtension]) === undefined)) {
                 return undefined;
             }
 
-            // we found the definition based on real path without extension so
-            // update logical path and real path
-            logicalPath = truncate(logicalPath, realPath.length - realPathWithoutExtension.length);
-            realPath = realPathWithoutExtension;
+            // we found the definition based on the path without extension so
+            // update the path
+            resolvedPath = resolvedPathWithoutExtension;
         }
 
-        // since we had to make sure a definition existed don't throw this away
-        resolved[0] = logicalPath;
-        resolved[1] = realPath;
-        resolved[2] = factoryOrObject;
-
-        return resolved;
+        return [resolvedPath, factoryOrObject];
     }
 
     function require(target, from) {
@@ -594,12 +417,12 @@ https://github.com/joyent/node/blob/master/lib/module.js
             throw moduleNotFoundError(target, from);
         }
 
-        var logicalPath = resolved[0];
+        var resolvedPath = resolved[0];
 
-        var module = instanceCache[logicalPath];
+        var module = instanceCache[resolvedPath];
 
         if (module !== undefined) {
-            // found cached entry based on the logical path
+            // found cached entry based on the path
             return module.exports;
         }
 
@@ -609,19 +432,19 @@ https://github.com/joyent/node/blob/master/lib/module.js
         // If a module is mapped to a global variable then we want to always
         // return that global instance of the module when it is being required
         // to avoid duplicate modules being loaded. For modules that are mapped
-        // to global variables we also add an entry that maps the real path
+        // to global variables we also add an entry that maps the path
         // of the module to the global instance of the loaded module.
-        var realPath = resolved[1];
-        if (loadedGlobalsByRealPath.hasOwnProperty(realPath)) {
-            return loadedGlobalsByRealPath[realPath];
+
+        if (loadedGlobalsByRealPath.hasOwnProperty(resolvedPath)) {
+            return loadedGlobalsByRealPath[resolvedPath];
         }
 
-        var factoryOrObject = resolved[2];
+        var factoryOrObject = resolved[1];
 
-        module = new Module(resolved);
+        module = new Module(resolvedPath);
 
         // cache the instance before loading (allows support for circular dependency with partial loading)
-        instanceCache[logicalPath] = module;
+        instanceCache[resolvedPath] = module;
 
         module.load(factoryOrObject);
 
@@ -631,13 +454,13 @@ https://github.com/joyent/node/blob/master/lib/module.js
     /*
     $rmod.run('/$/installed-module', '/src/foo');
     */
-    function run(logicalPath, options) {
+    function run(path, options) {
         var wait = !options || (options.wait !== false);
         if (wait && !_ready) {
-            return runQueue.push([logicalPath, options]);
+            return runQueue.push([path, options]);
         }
 
-        require(logicalPath, '/');
+        require(path, '/');
     }
 
     /*
