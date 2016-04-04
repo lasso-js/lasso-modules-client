@@ -5,6 +5,10 @@ function installedCode(parentPath, childName, childVersion, options) {
         parentPath = '';
     }
 
+    if (parentPath.charAt(0) === '/') {
+        parentPath = parentPath.substring(1);
+    }
+
     var code = modulesRuntimeGlobal + '.installed(' + JSON.stringify(parentPath) + ', ' +
         JSON.stringify(childName) + ', ' +
         JSON.stringify(childVersion);

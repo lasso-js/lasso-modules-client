@@ -12,10 +12,17 @@ Inspired by:
 https://github.com/joyent/node/blob/master/lib/module.js
 */
 (function() {
-    var win = typeof window === 'undefined' ? null : window;
+    var win;
 
-    if (win && win.$_mod) {
-        return;
+    if (typeof window !== 'undefined') {
+        win = window;
+
+        // This lasso modules client has already been loaded on the page. Do nothing;
+        if (win.$_mod) {
+            return;
+        }
+
+        win.global = win;
     }
 
     /** the module runtime */
@@ -48,7 +55,7 @@ https://github.com/joyent/node/blob/master/lib/module.js
     //   // the version of "bar" is 3.0.0
     //   "/foo$1.0.0/bar": "3.0.0"
     // }
-    var dependencies = {};
+    var installed = {};
 
     // Maps builtin modules such as "path", "buffer" to their fully resolved paths
     var builtins = {};
@@ -198,7 +205,7 @@ https://github.com/joyent/node/blob/master/lib/module.js
     function registerInstalledDependency(parentPath, packageName, packageVersion) {
         // Example:
         // dependencies['/my-package$1.0.0/$/my-installed-package'] = '2.0.0'
-        dependencies[parentPath + '/' + packageName] =  packageVersion;
+        installed[parentPath + '/' + packageName] =  packageVersion;
     }
 
     /**
@@ -274,12 +281,13 @@ https://github.com/joyent/node/blob/master/lib/module.js
     }
 
     function splitPackageIdAndSubpath(path) {
+        path = path.substring(1); /* Skip past the first slash */
         // Examples:
-        //     '/my-package$1.0.0/foo/bar' --> ['/my-package$1.0.0', '/foo/bar']
-        //     '/my-package$1.0.0' --> ['/my-package$1.0.0', '']
-        //     '/my-package$1.0.0/' --> ['/my-package$1.0.0', '/']
-        //     '/@my-scoped-package/foo/$1.0.0/' --> ['/@my-scoped-package/foo$1.0.0', '/']
-        var slashPos = path.indexOf('/', 1 /* Skip past the first slash */);
+        //     '/my-package$1.0.0/foo/bar' --> ['my-package$1.0.0', '/foo/bar']
+        //     '/my-package$1.0.0' --> ['my-package$1.0.0', '']
+        //     '/my-package$1.0.0/' --> ['my-package$1.0.0', '/']
+        //     '/@my-scoped-package/foo/$1.0.0/' --> ['@my-scoped-package/foo$1.0.0', '/']
+        var slashPos = path.indexOf('/');
 
         if (path.charAt(1) === '@') {
             // path is something like "/@my-user-name/my-scoped-package/subpath"
@@ -288,9 +296,13 @@ https://github.com/joyent/node/blob/master/lib/module.js
             slashPos = path.indexOf('/', slashPos+1);
         }
 
-        return slashPos === -1 ? [path, ''] : [path.substring(0, slashPos), path.substring(slashPos)];
-    }
+        var packageIdEnd = slashPos === -1 ? path.length : slashPos;
 
+        return [
+            path.substring(0, packageIdEnd), // Everything up to the slash
+            path.substring(packageIdEnd) // Everything after the package ID
+        ];
+    }
 
     function resolveInstalledModule(target, from) {
         // Examples:
@@ -334,7 +346,7 @@ https://github.com/joyent/node/blob/master/lib/module.js
             targetSubpath = target.substring(targetSlashPos);
         }
 
-        var targetPackageVersion = dependencies[fromPackageId + '/' + targetPackageName];
+        var targetPackageVersion = installed[fromPackageId + '/' + targetPackageName];
         if (targetPackageVersion) {
             var resolvedPath = '/' + targetPackageName + '$' + targetPackageVersion;
             if (targetSubpath) {

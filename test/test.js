@@ -63,7 +63,7 @@ describe('lasso-modules-client' , function() {
         });
 
         // Module "foo" requires "baz" 3.0.0
-        clientImpl.installed('/foo$1.0.0', 'baz', '3.0.0');
+        clientImpl.installed('foo$1.0.0', 'baz', '3.0.0');
 
 
         var resolved;
@@ -120,7 +120,7 @@ describe('lasso-modules-client' , function() {
         // Module "foo" requires "baz" 3.0.0
         // This will create the following link:
         // /$/foo/$/baz --> baz$3.0.0
-        clientImpl.installed('/foo$1.0.0', 'baz', '3.0.0');
+        clientImpl.installed('foo$1.0.0', 'baz', '3.0.0');
 
         clientImpl.ready();
 
@@ -162,7 +162,7 @@ describe('lasso-modules-client' , function() {
         // Module "foo" requires "baz" 3.0.0
         // This will create the following link:
         // /$/foo/$/baz --> baz$3.0.0
-        clientImpl.installed('/foo$1.0.0', 'baz', '3.0.0');
+        clientImpl.installed('foo$1.0.0', 'baz', '3.0.0');
 
         var baz = clientImpl.require('baz/lib/index', '/foo$1.0.0/hello');
 
@@ -199,12 +199,12 @@ describe('lasso-modules-client' , function() {
         // Module "foo" requires "baz" 3.0.0
         // This will create the following link:
         // /$/foo/$/baz --> baz$3.0.0
-        clientImpl.installed('/foo$1.0.0', 'baz', '3.0.0');
+        clientImpl.installed('foo$1.0.0', 'baz', '3.0.0');
 
         // Module "foo" requires "baz" 3.0.0
         // This will create the following link:
         // /$/bar/$/baz --> baz$3.0.0
-        clientImpl.installed('/bar$2.0.0', 'baz', '3.0.0');
+        clientImpl.installed('bar$2.0.0', 'baz', '3.0.0');
 
         var bazFromFoo = clientImpl.require('baz/lib/index', '/foo$1.0.0');
         expect(bazFromFoo.moduleId).to.equal('/baz$3.0.0/lib/index');
@@ -251,7 +251,7 @@ describe('lasso-modules-client' , function() {
         // Module "foo" requires "baz" 3.0.0
         // This will create the following link:
         // /$/foo/$/baz --> baz$3.0.0
-        clientImpl.installed('/foo$1.0.0', 'baz', '3.0.0');
+        clientImpl.installed('foo$1.0.0', 'baz', '3.0.0');
 
         var baz = clientImpl.require('baz/lib/index', '/foo$1.0.0');
 
@@ -656,8 +656,8 @@ describe('lasso-modules-client' , function() {
 
         clientImpl.main('/streams$1.0.0', 'lib/index');
 
-        clientImpl.installed('/app$1.0.0', 'streams', '1.0.0');
-        clientImpl.installed('/app$2.0.0', 'streams', '1.0.0');
+        clientImpl.installed('app$1.0.0', 'streams', '1.0.0');
+        clientImpl.installed('app$2.0.0', 'streams', '1.0.0');
 
         // define a module for a given real path
         clientImpl.def('/app$1.0.0/launch', function(require, exports, module, __filename, __dirname) {
@@ -704,7 +704,7 @@ describe('lasso-modules-client' , function() {
 
         clientImpl.main('/universal$1.0.0', 'lib/index');
 
-        clientImpl.installed('/app$1.0.0', 'universal', '1.0.0');
+        clientImpl.installed('app$1.0.0', 'universal', '1.0.0');
 
         // require "universal" before it is remapped
         var runtime0 = clientImpl.require('universal', '/app$1.0.0/lib');
@@ -741,8 +741,8 @@ describe('lasso-modules-client' , function() {
 
         clientImpl.main('/streams$1.0.0', 'lib/index');
 
-        clientImpl.installed('/app$1.0.0', 'streams', '1.0.0');
-        clientImpl.installed('/app$1.0.0', 'streams-browser', '2.0.0');
+        clientImpl.installed('app$1.0.0', 'streams', '1.0.0');
+        clientImpl.installed('app$1.0.0', 'streams-browser', '2.0.0');
 
         clientImpl.remap('/streams$1.0.0/lib/index', '/streams-browser$2.0.0/lib/index');
 
@@ -799,13 +799,13 @@ describe('lasso-modules-client' , function() {
 
         var widgetsModule = null;
         // var raptorUtilModule = null;
-        clientImpl.installed('/marko-widgets$0.1.0', 'raptor-util', '0.1.0');
+        clientImpl.installed('marko-widgets$0.1.0', 'raptor-util', '0.1.0');
         clientImpl.main('/raptor-util$0.1.0', 'lib/index');
         clientImpl.def('/raptor-util$0.1.0/lib/index', function(require, exports, module, __filename, __dirname) {
             exports.filename = __filename;
         });
 
-        clientImpl.installed('/app$1.0.0', 'marko-widgets', '0.1.0');
+        clientImpl.installed('app$1.0.0', 'marko-widgets', '0.1.0');
         clientImpl.main('/marko-widgets$0.1.0', 'lib/index');
         clientImpl.main('/marko-widgets$0.1.0/lib', 'index');
 
@@ -833,7 +833,7 @@ describe('lasso-modules-client' , function() {
         clientImpl.ready();
 
         // /$/foo depends on bar$0.1.0
-        clientImpl.installed('/foo$0.1.0', 'bar', '0.1.0');
+        clientImpl.installed('foo$0.1.0', 'bar', '0.1.0');
 
         // Requiring "/$/foo/$/bar/Baz" should actually resolve to "/$/foo/$/bar/lib/Baz"
         clientImpl.main('/bar$0.1.0/Baz', '../lib/Baz');
@@ -844,7 +844,7 @@ describe('lasso-modules-client' , function() {
         });
 
         // Add dependency /$/foo --> /foo$0.1.0
-        clientImpl.installed('/bar$0.1.0', 'foo', '0.1.0');
+        clientImpl.installed('bar$0.1.0', 'foo', '0.1.0');
 
         // Requiring "/$/foo" should actually resolve to  "/$/foo/lib/index"
         clientImpl.main('/foo$0.1.0', 'lib/index');
@@ -880,7 +880,7 @@ describe('lasso-modules-client' , function() {
 
         clientImpl.main('/events$0.0.1', 'lib/index');
 
-        clientImpl.installed('/async-writer$0.1.0', 'events', '0.0.1');
+        clientImpl.installed('async-writer$0.1.0', 'events', '0.0.1');
         clientImpl.remap('/events$0.0.1/lib/index', '/events-browserify$0.0.1/events');
         clientImpl.main('/events-browserify$0.0.1', 'events');
 
@@ -889,7 +889,7 @@ describe('lasso-modules-client' , function() {
         });
 
 
-        clientImpl.installed('/app$1.0.0', 'async-writer', '0.1.0');
+        clientImpl.installed('app$1.0.0', 'async-writer', '0.1.0');
         clientImpl.main('/async-writer$0.1.0', 'lib/async-writer');
 
 
@@ -920,7 +920,7 @@ describe('lasso-modules-client' , function() {
         });
 
 
-        clientImpl.installed('/app$1.0.0', 'process', '0.6.0');
+        clientImpl.installed('app$1.0.0', 'process', '0.6.0');
         clientImpl.main('/process$0.6.0', 'index');
         clientImpl.remap('/process$0.6.0/index', '/process$0.6.0/browser');
 
@@ -945,7 +945,7 @@ describe('lasso-modules-client' , function() {
         });
 
         // install dependency /$/marko (version 0.1.0)
-        clientImpl.installed('/app$1.0.0', 'marko', '0.1.0');
+        clientImpl.installed('app$1.0.0', 'marko', '0.1.0');
 
         // If something like "/$/marko" is required then
         // use "/$/marko/runtime/lib/marko"
@@ -958,7 +958,7 @@ describe('lasso-modules-client' , function() {
         clientImpl.main('/async-writer$0.1.0', 'lib/async-writer');
 
         // install dependency /$/marko/$/async-writer (version 0.1.0)
-        clientImpl.installed('/marko$0.1.0', 'async-writer', '0.1.0');
+        clientImpl.installed('marko$0.1.0', 'async-writer', '0.1.0');
 
         clientImpl.def('/app$1.0.0/index', function(require, exports, module, __filename, __dirname) {
             markoModule = require('marko');
@@ -1095,7 +1095,7 @@ describe('lasso-modules-client' , function() {
         });
 
         clientImpl.main("/jquery$1.11.3", "dist/jquery");
-        clientImpl.installed("/app$1.0.0", "jquery", "1.11.3");
+        clientImpl.installed("app$1.0.0", "jquery", "1.11.3");
         clientImpl.run('/app$1.0.0/jquery-main');
 
         expect(mainDidRun).to.equal(true);
@@ -1145,7 +1145,7 @@ describe('lasso-modules-client' , function() {
         // Module "foo" requires "baz" 3.0.0
         // This will create the following link:
         // /$/foo/$/baz --> baz$3.0.0
-        clientImpl.installed('/app$1.0.0', '@foo/bar', '3.0.0');
+        clientImpl.installed('app$1.0.0', '@foo/bar', '3.0.0');
 
         var fooBar = clientImpl.require('@foo/bar/lib/index', '/app$1.0.0/index');
 
