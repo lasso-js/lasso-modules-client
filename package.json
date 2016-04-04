@@ -3,14 +3,14 @@
   "description": "The client-side CommonJS runtime for Lasso.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/lasso-js/lasso-modules-client.git"
+    "url": "git+https://github.com/lasso-js/lasso-modules-client.git"
   },
   "scripts": {
     "test": "npm run mocha && npm run jshint",
-    "mocha": "node_modules/.bin/mocha --ui bdd --reporter spec test/ transport/test/",
-    "mocha-client": "node_modules/.bin/mocha --ui bdd --reporter spec test/",
-    "mocha-transport": "node_modules/.bin/mocha --ui bdd --reporter spec transport/test/",
-    "jshint": "node_modules/.bin/jshint src/ transport/src/"
+    "mocha": "mocha --ui bdd --reporter spec test/ transport/test/",
+    "mocha-client": "mocha --ui bdd --reporter spec test/",
+    "mocha-transport": "mocha --ui bdd --reporter spec transport/test/",
+    "jshint": "jshint src/ transport/src/"
   },
   "author": "Patrick Steele-Idem <pnidem@gmail.com>",
   "maintainers": "Patrick Steele-Idem <pnidem@gmail.com>",
@@ -29,5 +29,17 @@
   "publishConfig": {
     "registry": "https://registry.npmjs.org/"
   },
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "bugs": {
+    "url": "https://github.com/lasso-js/lasso-modules-client/issues"
+  },
+  "homepage": "https://github.com/lasso-js/lasso-modules-client#readme",
+  "directories": {
+    "test": "test"
+  },
+  "keywords": [
+    "lasso",
+    "modules",
+    "client"
+  ]
 }
