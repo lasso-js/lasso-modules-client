@@ -6,7 +6,8 @@ exports.codeGenerators = {
     remap: require('./code-remap'),
     builtin: require('./code-builtin'),
     ready: require('./code-ready'),
-    searchPath: require('./code-search-path')
+    searchPath: require('./code-search-path'),
+    loaderMetadata: require('./code-loader-metadata')
 };
 
 exports.getClientPath = require('./getClientPath');

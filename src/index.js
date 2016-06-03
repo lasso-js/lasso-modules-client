@@ -80,8 +80,8 @@ https://github.com/joyent/node/blob/master/lib/module.js
     // https://github.com/raptorjs/raptor-modules/issues/5
     var loadedGlobalsByRealPath = {};
 
-    // temporary variable for referencing a prototype
-    var proto;
+    // This variable keeps track of loader metadata
+    var loaderMetadata = {};
 
     function moduleNotFoundError(target, from) {
         var err = new Error('Cannot find module "' + target + '"' + (from ? ' from "' + from + '"' : ''));
@@ -98,20 +98,24 @@ https://github.com/joyent/node/blob/master/lib/module.js
         - exports: The exports provided during load
         - loaded: Has module been fully loaded (set to false until factory function returns)
 
-        NOT SUPPORTED BY RAPTOR:
+        NOT SUPPORTED:
         - parent: parent Module
         - paths: The search path used by this module (NOTE: not documented in Node.js module system so we don't need support)
         - children: The modules that were required by this module
         */
         this.id = this.filename = filename;
         this.loaded = false;
+        this.exports = undefined;
     }
 
     Module.cache = instanceCache;
 
-    proto = Module.prototype;
+    // temporary variable for referencing the Module prototype
+    var Module_prototype = Module.prototype;
 
-    proto.load = function(factoryOrObject) {
+    Module_prototype.__loaderMetadata = loaderMetadata;
+
+    Module_prototype.load = function(factoryOrObject) {
         var filename = this.id;
 
         if (factoryOrObject && factoryOrObject.constructor === Function) {
@@ -152,6 +156,8 @@ https://github.com/joyent/node/blob/master/lib/module.js
             instanceRequire.cache = instanceCache;
 
             // Expose the module system runtime via the `runtime` property
+            // TODO: We should deprecate this in favor of `Module.prototype.__runtime`
+            // @deprecated
             instanceRequire.runtime = $_mod;
 
             // $_mod.def("/foo$1.0.0/lib/index", function(require, exports, module, __filename, __dirname) {
@@ -507,6 +513,17 @@ https://github.com/joyent/node/blob/master/lib/module.js
         searchPaths.push(prefix);
     }
 
+    /**
+     * @param asyncPackageName {String} name of asynchronous package
+     * @param contentType {String} content type ("js" or "css")
+     * @param bundleUrl {String} URL of bundle that belongs to package
+     */
+    function addLoaderMetadata(asyncPackageName, contentType, bundleUrl) {
+        var metaForPackage = loaderMetadata[asyncPackageName] || (loaderMetadata[asyncPackageName] = {});
+        var urlsForContentType = metaForPackage[contentType] || (metaForPackage[contentType] = []);
+        urlsForContentType.push(bundleUrl);
+    }
+
     var pendingCount = 0;
     var onPendingComplete = function() {
         pendingCount--;
@@ -520,7 +537,7 @@ https://github.com/joyent/node/blob/master/lib/module.js
      * $_mod is the short-hand version that that the transport layer expects
      * to be in the browser window object
      */
-    $_mod = {
+    Module_prototype.__runtime = $_mod = {
         /**
          * Used to register a module factory/object (*internal*)
          */
@@ -543,6 +560,12 @@ https://github.com/joyent/node/blob/master/lib/module.js
          * Add a search path entry (internal)
          */
         searchPath: addSearchPath,
+
+        /**
+         * Calls to `async` are used to register metadata that is used
+         * by `lasso-loader` to load a collection of bundles asynchronously.
+         */
+        async: addLoaderMetadata,
 
         /**
          * Asynchronous bundle loaders should call `pending()` to instantiate
