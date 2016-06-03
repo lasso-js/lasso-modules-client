@@ -80,9 +80,6 @@ https://github.com/joyent/node/blob/master/lib/module.js
     // https://github.com/raptorjs/raptor-modules/issues/5
     var loadedGlobalsByRealPath = {};
 
-    // This variable keeps track of loader metadata
-    var loaderMetadata = {};
-
     function moduleNotFoundError(target, from) {
         var err = new Error('Cannot find module "' + target + '"' + (from ? ' from "' + from + '"' : ''));
 
@@ -112,8 +109,6 @@ https://github.com/joyent/node/blob/master/lib/module.js
 
     // temporary variable for referencing the Module prototype
     var Module_prototype = Module.prototype;
-
-    Module_prototype.__loaderMetadata = loaderMetadata;
 
     Module_prototype.load = function(factoryOrObject) {
         var filename = this.id;
@@ -513,17 +508,6 @@ https://github.com/joyent/node/blob/master/lib/module.js
         searchPaths.push(prefix);
     }
 
-    /**
-     * @param asyncPackageName {String} name of asynchronous package
-     * @param contentType {String} content type ("js" or "css")
-     * @param bundleUrl {String} URL of bundle that belongs to package
-     */
-    function addLoaderMetadata(asyncPackageName, contentType, bundleUrl) {
-        var metaForPackage = loaderMetadata[asyncPackageName] || (loaderMetadata[asyncPackageName] = {});
-        var urlsForContentType = metaForPackage[contentType] || (metaForPackage[contentType] = []);
-        urlsForContentType.push(bundleUrl);
-    }
-
     var pendingCount = 0;
     var onPendingComplete = function() {
         pendingCount--;
@@ -562,10 +546,18 @@ https://github.com/joyent/node/blob/master/lib/module.js
         searchPath: addSearchPath,
 
         /**
-         * Calls to `async` are used to register metadata that is used
-         * by `lasso-loader` to load a collection of bundles asynchronously.
+         * Sets the loader metadata for this build.
+         *
+         * @param asyncPackageName {String} name of asynchronous package
+         * @param contentType {String} content type ("js" or "css")
+         * @param bundleUrl {String} URL of bundle that belongs to package
          */
-        async: addLoaderMetadata,
+        loaderMetadata: function(data) {
+            // We store loader metadata in the prototype of Module
+            // so that `lasso-loader` can read it from
+            // `module.__loaderMetadata`.
+            Module_prototype.__loaderMetadata = data;
+        },
 
         /**
          * Asynchronous bundle loaders should call `pending()` to instantiate
