@@ -189,7 +189,8 @@ https://github.com/joyent/node/blob/master/lib/module.js
             var target = win || global;
             for (var i=0;i<globals.length; i++) {
                 var globalVarName = globals[i];
-                loadedGlobalsByRealPath[path] = target[globalVarName] = requireModule(path);
+                var globalModule = loadedGlobalsByRealPath[path] = requireModule(path);
+                target[globalVarName] = globalModule.exports;
             }
         }
     }
