@@ -125,7 +125,10 @@ https://github.com/joyent/node/blob/master/lib/module.js
 
             // this is the require used by the module
             var instanceRequire = function(target) {
-                return localCache[target] || (localCache[target] = require(target, dirname));
+                // Only store the `module` in the local cache since `module.exports` may not be accurate
+                // if there was a circular dependency
+                var module = localCache[target] || (localCache[target] = requireModule(target, dirname));
+                return module.exports;
             };
 
             // The require method should have a resolve method that will return the resolved
@@ -186,7 +189,7 @@ https://github.com/joyent/node/blob/master/lib/module.js
             var target = win || global;
             for (var i=0;i<globals.length; i++) {
                 var globalVarName = globals[i];
-                loadedGlobalsByRealPath[path] = target[globalVarName] = require(path);
+                loadedGlobalsByRealPath[path] = target[globalVarName] = requireModule(path);
             }
         }
     }
@@ -420,7 +423,7 @@ https://github.com/joyent/node/blob/master/lib/module.js
         return [resolvedPath, factoryOrObject];
     }
 
-    function require(target, from) {
+    function requireModule(target, from) {
         if (!target) {
             throw moduleNotFoundError('');
         }
@@ -436,7 +439,7 @@ https://github.com/joyent/node/blob/master/lib/module.js
 
         if (module !== undefined) {
             // found cached entry based on the path
-            return module.exports;
+            return module;
         }
 
         // Fixes issue #5 - Ensure modules mapped to globals only load once
@@ -461,6 +464,11 @@ https://github.com/joyent/node/blob/master/lib/module.js
 
         module.load(factoryOrObject);
 
+        return module;
+    }
+
+    function require(target, from) {
+        var module = requireModule(target, from);
         return module.exports;
     }
 
