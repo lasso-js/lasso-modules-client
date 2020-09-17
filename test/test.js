@@ -770,8 +770,8 @@ describe('lasso-modules-client' , function() {
         expect(clientImpl.join('/foo/baz', './abc.js')).to.equal('/foo/baz/abc.js');
         expect(clientImpl.join('/foo/baz', '../abc.js')).to.equal('/foo/abc.js');
         expect(clientImpl.join('/foo', '..')).to.equal('/');
-        expect(clientImpl.join('/foo', '../..')).to.equal('');
-        expect(clientImpl.join('foo', '..')).to.equal('');
+        expect(clientImpl.join('/foo', '../..')).to.equal('/');
+        expect(clientImpl.join('foo', '..')).to.equal('.');
         expect(clientImpl.join('foo/bar', '../test.js')).to.equal('foo/test.js');
         expect(clientImpl.join('abc/def', '.')).to.equal('abc/def');
         expect(clientImpl.join('/', '.')).to.equal('/');

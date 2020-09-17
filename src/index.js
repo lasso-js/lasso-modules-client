@@ -30,7 +30,7 @@ https://github.com/joyent/node/blob/master/lib/module.js
 
     // this object stores the module factories with the keys being module paths and
     // values being a factory function or object (e.g. "/baz$3.0.0/lib/index" --> Function)
-    var definitions = {};
+    var definitions = Object.create(null);
 
     // Search path that will be checked when looking for modules
     var searchPaths = [];
@@ -45,7 +45,7 @@ https://github.com/joyent/node/blob/master/lib/module.js
     var runQueue = [];
 
     // this object stores the Module instance cache with the keys being paths of modules (e.g., "/foo$1.0.0/bar" --> Module)
-    var instanceCache = {};
+    var instanceCache = Object.create(null);
 
     // This object maps installed dependencies to specific versions
     //
@@ -55,30 +55,19 @@ https://github.com/joyent/node/blob/master/lib/module.js
     //   // the version of "bar" is 3.0.0
     //   "/foo$1.0.0/bar": "3.0.0"
     // }
-    var installed = {};
+    var installed = Object.create(null);
 
     // Maps builtin modules such as "path", "buffer" to their fully resolved paths
-    var builtins = {};
+    var builtins = Object.create(null);
 
     // this object maps a directory to the fully resolved module path
     //
     // For example:
     //
-    var mains = {};
+    var mains = Object.create(null);
 
     // used to remap a one fully resolved module path to another fully resolved module path
-    var remapped = {};
-
-    var cacheByDirname = {};
-
-    // When a module is mapped to a global varialble we add a reference
-    // that maps the path of the module to the loaded global instance.
-    // We use this mapping to ensure that global modules are only loaded
-    // once if they map to the same path.
-    //
-    // See issue #5 - Ensure modules mapped to globals only load once
-    // https://github.com/raptorjs/raptor-modules/issues/5
-    var loadedGlobalsByRealPath = {};
+    var remapped = Object.create(null);
 
     function moduleNotFoundError(target, from) {
         var err = new Error('Cannot find module "' + target + '"' + (from ? ' from "' + from + '"' : ''));
@@ -113,22 +102,12 @@ https://github.com/joyent/node/blob/master/lib/module.js
     Module_prototype.load = function(factoryOrObject) {
         var filename = this.id;
 
-        if (factoryOrObject && factoryOrObject.constructor === Function) {
-            // factoryOrObject is definitely a function
-            var lastSlashPos = filename.lastIndexOf('/');
-
+        if (typeof factoryOrObject === "function") {
             // find the value for the __dirname parameter to factory
-            var dirname = filename.substring(0, lastSlashPos);
-
-            // local cache for requires initiated from this module/dirname
-            var localCache = cacheByDirname[dirname] || (cacheByDirname[dirname] = {});
-
+            var dirname = filename.slice(0, filename.lastIndexOf('/'));
             // this is the require used by the module
             var instanceRequire = function(target) {
-                // Only store the `module` in the local cache since `module.exports` may not be accurate
-                // if there was a circular dependency
-                var module = localCache[target] || (localCache[target] = requireModule(target, dirname));
-                return module.exports;
+                return require(target, dirname);
             };
 
             // The require method should have a resolve method that will return the resolved
@@ -142,12 +121,11 @@ https://github.com/joyent/node/blob/master/lib/module.js
 
                 var resolved = resolve(target, dirname);
 
-                if (!resolved) {
+                if (resolved === undefined) {
                     throw moduleNotFoundError(target, dirname);
                 }
 
-                // NOTE: resolved[0] is the path and resolved[1] is the module factory
-                return resolved[0];
+                return resolved;
             };
 
             // NodeJS provides access to the cache as a property of the "require" function
@@ -162,7 +140,7 @@ https://github.com/joyent/node/blob/master/lib/module.js
             this.exports = {};
 
             // call the factory function
-            factoryOrObject.call(this, instanceRequire, this.exports, this, filename, dirname);
+            factoryOrObject(instanceRequire, this.exports, this, filename, dirname);
         } else {
             // factoryOrObject is not a function so have exports reference factoryOrObject
             this.exports = factoryOrObject;
@@ -187,10 +165,9 @@ https://github.com/joyent/node/blob/master/lib/module.js
 
         if (globals) {
             var target = win || global;
+            var globalMod = require(path, "/");
             for (var i=0;i<globals.length; i++) {
-                var globalVarName = globals[i];
-                var globalModule = loadedGlobalsByRealPath[path] = requireModule(path);
-                target[globalVarName] = globalModule.exports;
+                target[globals[i]] = globalMod;
             }
         }
     }
@@ -213,66 +190,47 @@ https://github.com/joyent/node/blob/master/lib/module.js
         installed[parentPath + '/' + packageName] =  packageVersion;
     }
 
-    /**
-     * This function will take an array of path parts and normalize them by handling handle ".." and "."
-     * and then joining the resultant string.
-     *
-     * @param {Array} parts an array of parts that presumedly was split on the "/" character.
-     */
-    function normalizePathParts(parts) {
-
-        // IMPORTANT: It is assumed that parts[0] === "" because this method is used to
-        // join an absolute path to a relative path
-        var i;
-        var len = 0;
-
-        var numParts = parts.length;
-
-        for (i = 0; i < numParts; i++) {
-            var part = parts[i];
-
-            if (part === '.') {
-                // ignore parts with just "."
-                /*
-                // if the "." is at end of parts (e.g. ["a", "b", "."]) then trim it off
-                if (i === numParts - 1) {
-                    //len--;
-                }
-                */
-            } else if (part === '..') {
-                // overwrite the previous item by decrementing length
-                len--;
-            } else {
-                // add this part to result and increment length
-                parts[len] = part;
-                len++;
-            }
-        }
-
-        if (len === 1) {
-            // if we end up with just one part that is empty string
-            // (which can happen if input is ["", "."]) then return
-            // string with just the leading slash
-            return '/';
-        } else if (len > 2) {
-            // parts i s
-            // ["", "a", ""]
-            // ["", "a", "b", ""]
-            if (parts[len - 1].length === 0) {
-                // last part is an empty string which would result in trailing slash
-                len--;
-            }
-        }
-
-        // truncate parts to remove unused
-        parts.length = len;
-        return parts.join('/');
-    }
-
     function join(from, target) {
-        var targetParts = target.split('/');
-        var fromParts = from == '/' ? [''] : from.split('/');
-        return normalizePathParts(fromParts.concat(targetParts));
+        var fromLen = from.length;
+        var fromLastIndex = fromLen;
+        var targetStartIndex = 0;
+        var char;
+
+        while ((char = target[targetStartIndex]) === ".") {
+            targetStartIndex++;
+
+            if ((char = target[targetStartIndex]) === ".") {
+                targetStartIndex++;
+
+                if (fromLastIndex) {
+                    fromLastIndex = from.lastIndexOf("/", fromLastIndex - 1);
+
+                    if (fromLastIndex === -1) {
+                        fromLastIndex = 0;
+                    }
+                }
+            }
+
+            if ((char = target[targetStartIndex]) === "/") {
+                targetStartIndex++;
+            } else {
+                break;
+            }
+        }
+
+        if (char) {
+            if (fromLastIndex) {
+                return from.slice(0, fromLastIndex) + "/" + target.slice(targetStartIndex);
+            }
+
+            return target.slice(targetStartIndex);
+        }
+        
+        if (fromLastIndex) {
+            return fromLastIndex === fromLen ? from : from.slice(0, fromLastIndex);
+        }
+
+        return from[0] === "/" ? "/" : ".";
     }
 
     function withoutExtension(path) {
@@ -281,7 +239,7 @@ https://github.com/joyent/node/blob/master/lib/module.js
 
         /* jshint laxbreak:true */
         return ((lastDotPos === -1) || ((lastSlashPos = path.lastIndexOf('/')) !== -1) && (lastSlashPos > lastDotPos))
-            ? null // use null to indicate that returned path is same as given path
+            ? undefined // use undefined to indicate that returned path is same as given path
             : path.substring(0, lastDotPos);
     }
 
@@ -294,7 +252,7 @@ https://github.com/joyent/node/blob/master/lib/module.js
         //     '/@my-scoped-package/foo/$1.0.0/' --> ['@my-scoped-package/foo$1.0.0', '/']
         var slashPos = path.indexOf('/');
 
-        if (path.charAt(1) === '@') {
+        if (path[1] === '@') {
             // path is something like "/@my-user-name/my-scoped-package/subpath"
             // For scoped packages, the package name is two parts. We need to skip
             // past the second slash to get the full package name
@@ -313,7 +271,7 @@ https://github.com/joyent/node/blob/master/lib/module.js
         // Examples:
         // target='foo', from='/my-package$1.0.0/hello/world'
 
-        if (target.charAt(target.length-1) === '/') {
+        if (target[target.length-1] === '/') {
             // This is a hack because I found require('util/') in the wild and
             // it did not work because of the trailing slash
             target = target.slice(0, -1);
@@ -340,7 +298,7 @@ https://github.com/joyent/node/blob/master/lib/module.js
             targetSubpath = '';
         } else {
 
-            if (target.charAt(0) === '@') {
+            if (target[0] === '@') {
                 // target is something like "@my-user-name/my-scoped-package/subpath"
                 // For scoped packages, the package name is two parts. We need to skip
                 // past the first slash to get the full package name
@@ -364,12 +322,12 @@ https://github.com/joyent/node/blob/master/lib/module.js
     function resolve(target, from) {
         var resolvedPath;
 
-        if (target.charAt(0) === '.') {
+        if (target[0] === '/') {
+            // handle targets such as "/my/file" or "/$/foo/$/baz"
+            resolvedPath = target;
+        } else if (target[0] === '.') {
             // turn relative path into absolute path
             resolvedPath = join(from, target);
-        } else if (target.charAt(0) === '/') {
-            // handle targets such as "/my/file" or "/$/foo/$/baz"
-            resolvedPath = normalizePathParts(target.split('/'));
         } else {
             var len = searchPaths.length;
             for (var i = 0; i < len; i++) {
@@ -390,16 +348,12 @@ https://github.com/joyent/node/blob/master/lib/module.js
 
         // target is something like "/foo/baz"
         // There is no installed module in the path
-        var relativePath;
+        var relativePath = mains[resolvedPath];
 
         // check to see if "target" is a "directory" which has a registered main file
-        if ((relativePath = mains[resolvedPath]) !== undefined) {
-            if (!relativePath) {
-                relativePath = 'index';
-            }
-
+        if (relativePath !== undefined) {
             // there is a main file corresponding to the given target so add the relative path
-            resolvedPath = join(resolvedPath, relativePath);
+            resolvedPath = join(resolvedPath, relativePath || 'index');
         }
 
         var remappedPath = remapped[resolvedPath];
@@ -407,21 +361,16 @@ https://github.com/joyent/node/blob/master/lib/module.js
             resolvedPath = remappedPath;
         }
 
-        var factoryOrObject = definitions[resolvedPath];
-        if (factoryOrObject === undefined) {
+        if (definitions[resolvedPath] === undefined) {
             // check for definition for given path but without extension
-            var resolvedPathWithoutExtension;
-            if (((resolvedPathWithoutExtension = withoutExtension(resolvedPath)) === null) ||
-                ((factoryOrObject = definitions[resolvedPathWithoutExtension]) === undefined)) {
-                return undefined;
-            }
+            resolvedPath = withoutExtension(resolvedPath);
 
-            // we found the definition based on the path without extension so
-            // update the path
-            resolvedPath = resolvedPathWithoutExtension;
+            if (resolvedPath !== undefined && definitions[resolvedPath] === undefined) {
+                resolvedPath = undefined;
+            }
         }
 
-        return [resolvedPath, factoryOrObject];
+        return resolvedPath;
     }
 
     function requireModule(target, from) {
@@ -429,48 +378,25 @@ https://github.com/joyent/node/blob/master/lib/module.js
             throw moduleNotFoundError('');
         }
 
-        var resolved = resolve(target, from);
-        if (!resolved) {
+        var resolvedPath = resolve(target, from);
+
+        if (resolvedPath === undefined) {
             throw moduleNotFoundError(target, from);
         }
 
-        var resolvedPath = resolved[0];
-
         var module = instanceCache[resolvedPath];
 
-        if (module !== undefined) {
-            // found cached entry based on the path
-            return module;
+        if (module === undefined) {
+            // cache the instance before loading (allows support for circular dependency with partial loading)
+            module = instanceCache[resolvedPath] = new Module(resolvedPath);
+            module.load(definitions[resolvedPath]);
         }
-
-        // Fixes issue #5 - Ensure modules mapped to globals only load once
-        // https://github.com/raptorjs/raptor-modules/issues/5
-        //
-        // If a module is mapped to a global variable then we want to always
-        // return that global instance of the module when it is being required
-        // to avoid duplicate modules being loaded. For modules that are mapped
-        // to global variables we also add an entry that maps the path
-        // of the module to the global instance of the loaded module.
-
-        if (loadedGlobalsByRealPath.hasOwnProperty(resolvedPath)) {
-            return loadedGlobalsByRealPath[resolvedPath];
-        }
-
-        var factoryOrObject = resolved[1];
-
-        module = new Module(resolvedPath);
-
-        // cache the instance before loading (allows support for circular dependency with partial loading)
-        instanceCache[resolvedPath] = module;
-
-        module.load(factoryOrObject);
 
         return module;
     }
 
     function require(target, from) {
-        var module = requireModule(target, from);
-        return module.exports;
+        return requireModule(target, from).exports;
     }
 
     /*
@@ -482,7 +408,7 @@ https://github.com/joyent/node/blob/master/lib/module.js
             return runQueue.push([path, options]);
         }
 
-        require(path, '/');
+        requireModule(path, '/');
     }
 
     /*
@@ -545,7 +471,12 @@ https://github.com/joyent/node/blob/master/lib/module.js
         remap: remap,
         builtin: builtin,
         require: require,
-        resolve: resolve,
+        resolve: function (target, from) {
+            var resolved = resolve(target, from);
+            if (resolved !== undefined) {
+                return [resolved, definitions[resolved]];
+            }
+        },
         join: join,
         ready: ready,
 
