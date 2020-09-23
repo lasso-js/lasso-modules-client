@@ -69,6 +69,7 @@ function defineCode(path, code, options) {
             tokenizer.forEachToken(code, function(token) {
                 if (token.name === 'useStrict') {
                     useStrictToken = token;
+                    return false;
                 }
             });
 

@@ -28,10 +28,9 @@ function create(tokens) {
             var matches;
             while ((matches = tokensRegExp.exec(value))) {
                 var token = getToken(matches);
-                if (token.stop) {
+                if (token.stop || callback.call(thisObj, token) === false) {
                     break;
                 }
-                callback.call(thisObj, token);
             }
         }
     };
